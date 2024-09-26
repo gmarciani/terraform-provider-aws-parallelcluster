@@ -16,6 +16,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"os"
 	"time"
 
@@ -58,15 +59,16 @@ type PclusterProvider struct {
 
 // PclusterProviderModel describes the provider data model.
 type PclusterProviderModel struct {
-	Endpoint    types.String `tfsdk:"endpoint"`
-	StackName   types.String `tfsdk:"api_stack_name"`
-	UseUserRole types.Bool   `tfsdk:"use_user_role"`
-	RoleArn     types.String `tfsdk:"role_arn"`
-	Region      types.String `tfsdk:"region"`
-	Profile     types.String `tfsdk:"profile"`
-	AwsKey      types.String `tfsdk:"aws_key"`
-	AwsSecret   types.String `tfsdk:"aws_secret"`
-	ApiName     types.String `tfsdk:"api_name"`
+	Endpoint      types.String `tfsdk:"endpoint"`
+	StackName     types.String `tfsdk:"api_stack_name"`
+	UseUserRole   types.Bool   `tfsdk:"use_user_role"`
+	RoleArn       types.String `tfsdk:"role_arn"`
+	Region        types.String `tfsdk:"region"`
+	Profile       types.String `tfsdk:"profile"`
+	AwsKey        types.String `tfsdk:"aws_key"`
+	AwsSecret     types.String `tfsdk:"aws_secret"`
+	ApiName       types.String `tfsdk:"api_name"`
+	AssumeRoleArn types.String `tfsdk:"assume_role_arn"`
 }
 
 func (p *PclusterProvider) Metadata(
@@ -125,6 +127,10 @@ With AWS ParallelCluster, you can quickly build and deploy proof of concept and 
 			},
 			"api_name": schema.StringAttribute{
 				MarkdownDescription: "The name of the ParallelCluster API. Used to retrieve the api endpoint if not given. Defaults to ParallelCluster.",
+				Optional:            true,
+			},
+			"assume_role_arn": schema.StringAttribute{
+				MarkdownDescription: "The role to assume to execute Terraform.",
 				Optional:            true,
 			},
 		},
@@ -300,6 +306,12 @@ func (p *PclusterProvider) Configure(
 			fmt.Sprintf("%v", err),
 		)
 		return
+	}
+
+	if !data.AssumeRoleArn.IsNull() {
+		stsSvc := sts.NewFromConfig(cfg)
+		creds := stscreds.NewAssumeRoleProvider(stsSvc, data.AssumeRoleArn.ValueString())
+		cfg.Credentials = aws.NewCredentialsCache(creds)
 	}
 
 	if !data.ApiName.IsNull() {
